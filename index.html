@@ -1,0 +1,290 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+  <head>
+    <style>
+      div.padded {
+        padding-top: 0px;
+        padding-right: 100px;
+        padding-bottom: 0.25in;
+        padding-left: 100px;
+      }
+    </style>
+    <title>CS 184 Final Report</title>
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+    <link rel="stylesheet" type="text/css" href="style.css" media="screen" />
+  </head>
+  <body>
+    <br />
+    <h1 align="middle">
+      CS184 Final Project Report: Adapting Human Motion to Character Mesh
+      Movement
+    </h1>
+    <h2 align="middle">
+      David Deng, Chung Min Kim, Jerry Zhu, and Anthony Tong
+    </h2>
+
+    <div class="padded">
+      <h2 align="middle">Abstract</h2>
+
+      <p>
+        It is critical to lower the high barrier to entry for controlling
+        animation rigs, as software such as Blender are very difficult to use
+        for beginners (like ourselves). Our project will allow a person to film
+        a video of themselves and map their behavior to an animation with a
+        character rig. Specifically, the goal of our project is to transfer
+        human motion onto a skinned, rigged animated character. To do this, we
+        first extract a sequence of 3D skeletons from a video using an out of
+        the box deep human pose estimator. Next, we preprocess the skeleton by
+        smoothing the motion and making it compatible with the pretrained
+        networks from Skeleton-Aware Networks for Deep Motion Retargeting, which
+        we use to then remap our skeleton to the animated character.
+      </p>
+
+      <h2 align="middle">Background</h2>
+
+      <li>
+        <a href="https://arxiv.org/pdf/1912.05656.pdf">
+          Video Inference for Human Body Pose and Shape Estimation (VIBE)
+        </a>
+        <p>
+          VIBE is the state of the art deep learning method to estimate 3D human
+          meshes from videos, and utilizes a motion discriminator to achieve
+          realistic human dynamics.
+        </p>
+      </li>
+
+      <li>
+        <a
+          href="https://deepmotionediting.github.io/papers/skeleton-aware-camera-ready.pdf"
+        >
+          Skeleton-Aware Networks for Deep Motion
+        </a>
+
+        <p>
+          Retargeting (DeepMotionEditing) This deep motion retargeting paper
+          achieves successful motion transfer across two different skeletons by
+          utilizing a novel skeletal convolution to encode and decode the
+          skeleton motions.
+        </p>
+      </li>
+
+      <h2 align="middle">Technical Approach Details</h2>
+
+      <img src="full_jerry.gif" align="middle" height="400px" />
+
+      <ol>
+        <li>
+          <h4>Apply VIBE to our own test video</h4>
+          For this project, our plan was to translate human motions in
+          in-the-wild videos into custom animation rigs. We set up our local
+          environments to run the state-of-the-art 3D human pose estimator
+          (VIBE, Video Inference for Human Body Pose and Shape Estimation) on
+          our own input videos. We also modified VIBE to produce constant shape
+          parameters across frames for easier rigging by taking the mean across
+          frames.
+        </li>
+
+        <li>
+          <h4>Preprocess bvh file</h4>
+          Deep Motion Retargeting requires a bvh file as input; however, VIBE
+          outputs a pkl file with 3D mesh and joint data. Fortunately, the VIBE
+          repository also contains a pkl-to-fbx conversion script, so we used
+          this to generate an fbx file. Next we used blender to convert fbx to
+          bvh and preprocess the motion capture data. We utilized Blender’s
+          automatic bone orientation, applied motion smoothing, and adjusted the
+          mesh topology to match the meshes from Deep Motion Retargeting so that
+          our skeletons are compatible with their pretrained networks.
+        </li>
+
+        <li>
+          <h4>Apply deep motion retargeting to our bvh file</h4>
+          To apply DeepMotionEditing to our skeletons, we needed to integrate
+          our skeleton’s format into the repo. To do this, we added the joint
+          names of our skeleton into a hardcoded list of skeleton formats. We
+          excluded any extraneous joints like fingers. Next, we made a folder
+          for a new character type in the repo’s dataset and added our bvh
+          files. Then we ran the data preprocessing script, which calculates the
+          average movements of each character as npy files for the neural
+          network to use. Because we only have a small set of bvh files, the
+          average motions of our character are very noisy, so for our skeleton
+          format we instead use the average movements of a realistically
+          proportioned character like Aj. Finally, we apply the repo’s
+          pretrained networks to our skeletons to transfer our motion to a new
+          skeleton and save the output skeleton as a new bvh file.
+        </li>
+
+        <li>
+          <h4>Rendering Character Mesh</h4>
+          We utilize a Blender script that applies "skinning" to the skeletons
+          outputted from DeepMotionEditing. We first download the fbx file that
+          corresponds to the targeted character. Then we can obtain a skinned
+          animation by running the Blender script. We found that the Blender
+          script does not work well for all fbx files so we also added some
+          manual skinning. We do this by manually aligning the mesh and skeleton
+          of the retargeted character and using Blender’s automatic weights
+          function. That way, the skeleton will match the skin and will result
+          in the rendered animation.
+        </li>
+      </ol>
+
+      <h2 align="middle">Problems/bugs encountered</h2>
+
+      <li>
+        Bpy package for fbx generation was very difficult to install locally
+        (pip install did not work). We had to do it on Windows.
+      </li>
+      <li>
+        Raw fbx file was very jittery. Applied motion smoothing in blender.
+      </li>
+      <li>
+        The VIBE output included a bone connecting the pelvis to the root, which
+        made the topology of our skeleton different from normal human topology.
+        We removed this in step 3.
+      </li>
+      <li>
+        In order for the pretrained networks to run, our input skeleton had to
+        have the same structure as the skeletons in the dataset. Removing bones
+        was easy (step 3) but adding them was difficult. The skeletons in the
+        dataset had four bones in the spine while ours only had three. We ended
+        up subdividing a spine bone in Blender to fix this.
+      </li>
+      <li>
+        The average motions for our input skeleton computed in data
+        preprocessing were extremely noisy, as we only had a few bvh files. This
+        made the predictions fly all over the place. To fix this, we instead
+        used the average motions of Aj, a realistically proportioned character
+        in the dataset.
+      </li>
+
+      <h2 align="middle">Lessons Learned</h2>
+
+      <p>
+        This project emphasized to us the importance of starting early and
+        building up projects one step at a time. We began working relatively
+        late and felt constantly short on time. A big reason for this is that we
+        ran into numerous issues running DeepMotionEditing with a new skeleton
+        format and spent many hours debugging. Thankfully, we eventually
+        identified and addressed all the incompatibilities between our raw VIBE
+        output and the DeepMotionEditing.
+      </p>
+
+      <h2 align="middle">Results</h2>
+
+      <h3>VIBE Outputs</h3>
+
+      <p>
+        The Videos Below show 4 different human motion videos in different
+        settings and VIBE’s outputted human mesh.
+      </p>
+
+      <table style="width=100%" align="middle">
+        <tr>
+          <td>
+            <img src="Jerry.gif" align="middle" height="200px" />
+            <figcaption align="middle">Jerry VIBE Output</figcaption>
+          </td>
+          <td>
+            <img src="Anthony.gif" align="middle" height="200px" />
+            <figcaption align="middle">Anthony VIBE Output</figcaption>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <img src="David.gif" align="middle" height="200px" />
+            <figcaption align="middle">David VIBE Output</figcaption>
+          </td>
+          <td>
+            <img src="ChungMin.gif" align="middle" height="200px" />
+            <figcaption align="middle">Chung Min VIBE Output</figcaption>
+          </td>
+        </tr>
+      </table>
+
+      <h3>Deep Motion Retargetting Outputs</h3>
+
+      <p>
+        The Videos Below show 4 different character meshes outputted by
+        DeepMotionEditing.
+      </p>
+
+      <table style="width=100%" align="middle">
+        <tr>
+          <td>
+            <img src="Jerry_crop.gif" align="middle" height="200px" />
+            <figcaption align="middle">Jerry Input Video</figcaption>
+          </td>
+          <td>
+            <img src="BigVegas.gif" align="middle" height="200px" />
+            <figcaption align="middle">Big Vegas Output</figcaption>
+          </td>
+          <td>
+            <img src="David_crop.gif" align="middle" height="200px" />
+            <figcaption align="middle">David Input Video</figcaption>
+          </td>
+          <td>
+            <img src="Aj.gif" align="middle" height="200px" />
+            <figcaption align="middle">AJ Output</figcaption>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <img src="ChungMin_crop.gif" align="middle" height="200px" />
+            <figcaption align="middle">Chung Min Input Video</figcaption>
+          </td>
+          <td>
+            <img src="Mousey.gif" align="middle" height="200px" />
+            <figcaption align="middle">Mousey Output</figcaption>
+          </td>
+          <td>
+            <img src="Anthony_crop.gif" align="middle" height="200px" />
+            <figcaption align="middle">Anthony Input Video</figcaption>
+          </td>
+          <td>
+            <img src="Granny.gif" align="middle" height="200px" />
+            <figcaption align="middle">Sporty Granny Output</figcaption>
+          </td>
+        </tr>
+      </table>
+
+      <h2 align="middle">Presentation</h2>
+      <li>
+        <a
+          href="https://drive.google.com/file/d/1UInspXJXL8X8-S5wiv829Rklqzr6euXX/view?fbclid=IwAR0oBfn8gdmU9-vGPzi9MSr8EhhVh37rEP9_0lBZqOZtRfQg8dRS9_bfrWU"
+          >Video</a
+        >
+      </li>
+      <li>
+        <a
+          href="https://docs.google.com/presentation/d/1NYiaxMmP488YQ-58-6kWY9XfUB1H2glCmP-QN3ZzAw4/edit?usp=sharing"
+          >Slides</a
+        >
+      </li>
+
+      <h2 align="middle">Resources</h2>
+
+      <h4>VIBE</h4>
+
+      <li><a href="https://arxiv.org/abs/1912.05656">VIBE Paper</a></li>
+      <li><a href="https://github.com/mkocabas/VIBE">VIBE Github</a></li>
+
+      <h4>Skeleton-Aware Networks for Deep Motion Retargeting Paper</h4>
+
+      <li>
+        <a href="https://deepmotionediting.github.io/retargeting"
+          >Skeleton-Aware Networks for Deep Motion Retargeting Paper</a
+        >
+      </li>
+      <li>
+        <a href="https://github.com/DeepMotionEditing/deep-motion-editing"
+          >Skeleton-Aware Networks for Deep Motion Retargeting Github</a
+        >
+      </li>
+      <li>
+        <a href="https://deepmotionediting.github.io/retargeting"
+          >Skeleton-Aware Networks for Deep Motion Retargeting SIGGRAPH 2020
+          Website</a
+        >
+      </li>
+    </div>
+  </body>
+</html>
